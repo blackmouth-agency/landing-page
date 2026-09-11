@@ -1,38 +1,41 @@
+import { useEffect, useState } from "react";
 import logo from "../../assets/images/logo.png";
+import { navLinks } from "../../data/navLinks";
+import NavLink from "../ui/NavLink";
+import MenuToggle from "../ui/MenuToggle";
+import MobileMenu from "./MobileMenu";
 
-const links = [
-  { label: "El problema", href: "#problema" },
-  { label: "La solución", href: "#solucion" },
-  { label: "Qué incluye", href: "#incluye" },
-  { label: "Servicios", href: "#servicios" },
-  { label: "Equipo", href: "#equipo" },
-  { label: "Hablemos", href: "#hablemos" },
-];
+const MOBILE_NAV_ID = "mobile-nav";
 
 export default function Navbar() {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
+
   return (
-    <nav className="fixed top-0 left-0 z-50 w-full">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
-        <a href="#inicio">
-          <img
-            src={logo}
-            alt="Logo"
-            className="h-10 w-auto"
-          />
+    <>
+      <header className="fixed top-0 left-0 z-50 flex w-full items-center justify-between gap-5 px-5 py-4 mix-blend-difference sm:px-8">
+        <a href="#inicio" aria-label="BLACKMOUTH inicio">
+          <img src={logo} alt="BLACKMOUTH" className="h-9 w-auto" />
         </a>
-        
-        <div className="flex items-center gap-8">
-          {links.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              className="text-sm transition-opacity hover:opacity-60"
-            >
+
+        <nav className="hidden items-center gap-7 md:flex">
+          {navLinks.map((link) => (
+            <NavLink key={link.href} href={link.href}>
               {link.label}
-            </a>
+            </NavLink>
           ))}
-        </div>
-      </div>
-    </nav>
+        </nav>
+
+        <MenuToggle open={open} onClick={() => setOpen((v) => !v)} controls={MOBILE_NAV_ID} />
+      </header>
+
+      <MobileMenu id={MOBILE_NAV_ID} open={open} links={navLinks} onClose={() => setOpen(false)} />
+    </>
   );
 }
