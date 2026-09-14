@@ -19,9 +19,9 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="fixed top-0 left-0 z-50 flex w-full items-center justify-between gap-5 px-5 py-4 mix-blend-difference sm:px-8">
+      <header className="fixed top-0 left-0 z-50 flex w-full items-center justify-between gap-5 bg-black/50 px-5 py-4 backdrop-blur-md sm:px-8">
         <a href="#inicio" aria-label="BLACKMOUTH inicio">
-          <img src={logo} alt="BLACKMOUTH" className="h-9 w-auto" />
+          <img src={logo} alt="BLACKMOUTH" className="h-12 w-auto md:h-16" />
         </a>
 
         <nav className="hidden items-center gap-7 md:flex">

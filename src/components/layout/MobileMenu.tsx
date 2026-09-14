@@ -21,7 +21,7 @@ export default function MobileMenu({ id, open, links, onClose }: MobileMenuProps
 
       <nav
         id={id}
-        className={`fixed inset-y-0 right-0 z-40 flex w-[78vw] max-w-xs flex-col items-start justify-center gap-7 bg-bm-g900 px-9 transition-transform duration-300 ease-out md:hidden ${
+        className={`fixed inset-y-0 right-0 z-40 flex w-full flex-col items-start justify-center gap-7 bg-bm-g900 px-9 transition-transform duration-300 ease-out md:hidden ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >

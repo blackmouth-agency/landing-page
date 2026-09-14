@@ -1,198 +1,229 @@
-import { useEffect, useRef, useState } from "react";
-import heroReal from "../assets/images/hero1.jpg";
-import heroPolished from "../assets/images/hero2.jpg";
+import { useCallback, useEffect, useRef, useState, type PointerEventHandler } from "react";
+import heroOriginal from "../assets/images/hero1.jpg";
+import heroFinal from "../assets/images/hero2.jpg";
+import HeroBrand from "../components/hero/HeroBrand";
+import HeroHeadline from "../components/hero/HeroHeadline";
+import HeroDot from "../components/hero/HeroDot";
+import HeroMessage from "../components/hero/HeroMessage";
+import HeroSpotlight from "../components/hero/HeroSpotlight";
+import PhotoLayerTop from "../components/hero/PhotoLayerTop";
+import PhotoLayerHidden from "../components/hero/PhotoLayerHidden";
 import { heroHotspots } from "../data/heroHotspots";
-import HeroHotspotMarker from "../components/ui/HeroHotspotMarker";
 
-const DESKTOP_RADIUS = 245;
-const TOUCH_RADIUS = 170;
-const HOTSPOT_TRIGGER_MARGIN = 110;
-const RADIUS_EASE = 0.14;
-const TOUCH_SWEEP_MS = 5200;
+const FEATHER = 76; // % del radio donde empieza el degradado del borde de la máscara
+const HIT_RATIO = 0.6; // proximidad (respecto al radio) que activa un hotspot
+const EDGE_PADDING = 30; // separación mínima del spotlight respecto al borde del hero
 
 export default function Hero() {
-  const [reducedMotion, setReducedMotion] = useState(
-    () => matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
   const heroRef = useRef<HTMLElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
-  const topImgRef = useRef<HTMLImageElement>(null);
-  const hotspotRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const hiddenLayerRef = useRef<HTMLDivElement>(null);
+  const spotRef = useRef<HTMLDivElement>(null);
+  const dotRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const msgRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  useEffect(() => {
-    const query = matchMedia("(prefers-reduced-motion: reduce)");
-    const handleChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
-    query.addEventListener("change", handleChange);
-    return () => query.removeEventListener("change", handleChange);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const pos = useRef({ x: 0, y: 0 });
+  const dragOffset = useRef({ x: 0, y: 0 });
+  const draggingRef = useRef(false);
+  const snappingRef = useRef(false);
+  const seeded = useRef(false);
+  const activeHotspots = useRef(heroHotspots.map(() => false));
+  const rafId = useRef<number | null>(null);
+  const snapRafId = useRef<number | null>(null);
+
+  const apply = useCallback(() => {
+    const hero = heroRef.current;
+    const hidden = hiddenLayerRef.current;
+    const spot = spotRef.current;
+    if (!hero || !hidden || !spot) return;
+
+    const rect = hero.getBoundingClientRect();
+    if (rect.width < 40 || rect.height < 40) return;
+
+    const radius = spot.offsetWidth / 2 || 160;
+    if (!seeded.current) {
+      seeded.current = true;
+      pos.current.x = Math.min(rect.width * 0.78, rect.width - radius - EDGE_PADDING);
+      pos.current.y = Math.min(rect.height * 0.72, rect.height - radius - EDGE_PADDING);
+    }
+
+    // Mientras se arrastra o se anima el regreso, la posición no se recorta aquí:
+    // el lente puede salir del borde y solo se ajusta al soltarlo.
+    if (!draggingRef.current && !snappingRef.current) {
+      const pad = Math.min(radius + EDGE_PADDING, rect.width / 2, rect.height / 2);
+      pos.current.x = Math.max(pad, Math.min(rect.width - pad, pos.current.x));
+      pos.current.y = Math.max(pad, Math.min(rect.height - pad, pos.current.y));
+    }
+
+    const feather = draggingRef.current ? 100 : FEATHER;
+    const mask = `radial-gradient(circle ${radius}px at ${pos.current.x}px ${pos.current.y}px, #000 0%, #000 ${feather}%, rgba(0,0,0,0) 100%)`;
+    hidden.style.setProperty("-webkit-mask-image", mask);
+    hidden.style.setProperty("mask-image", mask);
+    spot.style.transform = `translate(${pos.current.x}px, ${pos.current.y}px)`;
+
+    const hitDistance = radius * HIT_RATIO;
+    heroHotspots.forEach((hotspot, i) => {
+      const dx = (hotspot.x / 100) * rect.width - pos.current.x;
+      const dy = (hotspot.y / 100) * rect.height - pos.current.y;
+      const isActive = Math.sqrt(dx * dx + dy * dy) < hitDistance;
+      if (isActive === activeHotspots.current[i]) return;
+      activeHotspots.current[i] = isActive;
+
+      const dot = dotRefs.current[i];
+      if (dot) {
+        dot.style.opacity = isActive ? "0" : "1";
+        dot.style.transform = isActive ? "scale(0.4)" : "scale(1)";
+      }
+      const message = msgRefs.current[i];
+      if (message) message.style.opacity = isActive ? "1" : "0";
+    });
   }, []);
 
-  useEffect(() => {
-    if (reducedMotion) return;
-
+  const handlePointerDown: PointerEventHandler<HTMLDivElement> = (e) => {
     const hero = heroRef.current;
-    const stage = stageRef.current;
-    const topImg = topImgRef.current;
-    if (!hero || !stage || !topImg) return;
+    if (!hero) return;
+    const rect = hero.getBoundingClientRect();
+    dragOffset.current.x = pos.current.x - (e.clientX - rect.left);
+    dragOffset.current.y = pos.current.y - (e.clientY - rect.top);
+    draggingRef.current = true;
+    setIsDragging(true);
+    e.preventDefault();
+  };
 
-    const touch = matchMedia("(hover: none)").matches;
-    let radius = 0;
-    let targetRadius = 0;
-    let rafId: number;
-
-    const setHotspots = (x: number, y: number, stageRect: DOMRect) => {
-      heroHotspots.forEach((h) => {
-        const el = hotspotRefs.current[h.id];
-        if (!el) return;
-        const r = el.getBoundingClientRect();
-        const cx = r.left - stageRect.left + r.width / 2;
-        const cy = r.top - stageRect.top + r.height / 2;
-        el.classList.toggle("hero-hotspot-on", Math.hypot(cx - x, cy - y) < radius + HOTSPOT_TRIGGER_MARGIN);
+  useEffect(() => {
+    const handlePointerMove = (e: PointerEvent) => {
+      const hero = heroRef.current;
+      if (!draggingRef.current || !hero) return;
+      const rect = hero.getBoundingClientRect();
+      pos.current.x = e.clientX - rect.left + dragOffset.current.x;
+      pos.current.y = e.clientY - rect.top + dragOffset.current.y;
+      if (rafId.current !== null) return;
+      rafId.current = requestAnimationFrame(() => {
+        rafId.current = null;
+        apply();
       });
     };
 
-    const ease = () => {
-      radius += (targetRadius - radius) * RADIUS_EASE;
-      topImg.style.setProperty("--r", `${radius.toFixed(1)}px`);
-      rafId = requestAnimationFrame(ease);
-    };
-    ease();
+    const handlePointerUp = () => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      setIsDragging(false);
 
-    if (touch) {
-      let start: number | null = null;
-      const sweep = (ts: number) => {
-        if (start === null) start = ts;
-        const p = ((ts - start) / TOUCH_SWEEP_MS) % 1;
-        const rect = stage.getBoundingClientRect();
-        const x = rect.width * (0.5 + 0.34 * Math.sin(p * Math.PI * 2));
-        const y = rect.height * 0.42;
-        topImg.style.setProperty("--mx", `${x}px`);
-        topImg.style.setProperty("--my", `${y}px`);
-        setHotspots(x, y, rect);
-        rafId = requestAnimationFrame(sweep);
+      const hero = heroRef.current;
+      const spot = spotRef.current;
+      if (!hero || !spot) return;
+      const rect = hero.getBoundingClientRect();
+      const radius = spot.offsetWidth / 2 || 160;
+      const pad = Math.min(radius + EDGE_PADDING, rect.width / 2, rect.height / 2);
+      const targetX = Math.max(pad, Math.min(rect.width - pad, pos.current.x));
+      const targetY = Math.max(pad, Math.min(rect.height - pad, pos.current.y));
+
+      if (targetX === pos.current.x && targetY === pos.current.y) return;
+
+      if (snapRafId.current !== null) cancelAnimationFrame(snapRafId.current);
+      snappingRef.current = true;
+      const startX = pos.current.x;
+      const startY = pos.current.y;
+      const startTime = performance.now();
+      const duration = 320;
+
+      const tick = (now: number) => {
+        const t = Math.min((now - startTime) / duration, 1);
+        const ease = 1 - Math.pow(1 - t, 3);
+        pos.current.x = startX + (targetX - startX) * ease;
+        pos.current.y = startY + (targetY - startY) * ease;
+        apply();
+        if (t < 1) {
+          snapRafId.current = requestAnimationFrame(tick);
+        } else {
+          snappingRef.current = false;
+          snapRafId.current = null;
+        }
       };
-      targetRadius = TOUCH_RADIUS;
-      hero.classList.add("xraying");
-      rafId = requestAnimationFrame(sweep);
-
-      return () => cancelAnimationFrame(rafId);
-    }
-
-    const handleEnter = () => {
-      targetRadius = DESKTOP_RADIUS;
-      hero.classList.add("xraying");
-    };
-    const handleLeave = () => {
-      targetRadius = 0;
-      hero.classList.remove("xraying");
-      heroHotspots.forEach((h) => hotspotRefs.current[h.id]?.classList.remove("hero-hotspot-on"));
-    };
-    const handleMove = (e: PointerEvent) => {
-      const rect = stage.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      topImg.style.setProperty("--mx", `${x}px`);
-      topImg.style.setProperty("--my", `${y}px`);
-      setHotspots(x, y, rect);
+      snapRafId.current = requestAnimationFrame(tick);
     };
 
-    stage.addEventListener("pointerenter", handleEnter);
-    stage.addEventListener("pointerleave", handleLeave);
-    stage.addEventListener("pointermove", handleMove, { passive: true });
-
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
     return () => {
-      cancelAnimationFrame(rafId);
-      stage.removeEventListener("pointerenter", handleEnter);
-      stage.removeEventListener("pointerleave", handleLeave);
-      stage.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      if (rafId.current !== null) cancelAnimationFrame(rafId.current);
+      if (snapRafId.current !== null) cancelAnimationFrame(snapRafId.current);
     };
-  }, [reducedMotion]);
+  }, [apply]);
+
+  useEffect(() => {
+    const hero = heroRef.current;
+    if (!hero) return;
+    const observer = new ResizeObserver(apply);
+    observer.observe(hero);
+    apply();
+    return () => observer.disconnect();
+  }, [apply]);
+
+  // Sincroniza la máscara con la animación de expansión/contracción del lente
+  useEffect(() => {
+    const start = performance.now();
+    let id: number;
+    const tick = (now: number) => {
+      apply();
+      if (now - start < 320) id = requestAnimationFrame(tick);
+    };
+    id = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(id);
+  }, [isDragging, apply]);
 
   return (
-    <section ref={heroRef} id="inicio" className="hero relative h-svh min-h-[620px] overflow-hidden bg-black">
-      <div ref={stageRef} className="absolute inset-0">
-        <img
-          src={heroReal}
-          alt="El equipo de BlackMouth Agency grabando en el set real, con luces y chroma a la vista"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        {!reducedMotion && (
-          <img
-            ref={topImgRef}
-            src={heroPolished}
-            alt=""
-            aria-hidden="true"
-            className="hero-top absolute inset-0 h-full w-full object-cover"
+    <section
+      ref={heroRef}
+      id="inicio"
+      className="font-archivo relative h-screen min-h-[660px] touch-none overflow-hidden bg-bm-ink select-none"
+    >
+      <PhotoLayerTop src={heroFinal} alt="Equipo de Blackmouth, resultado final" />
+
+      <PhotoLayerHidden ref={hiddenLayerRef} src={heroOriginal} alt="El mismo set con las luces y equipos a la vista">
+        <HeroHeadline variant="hidden">
+          <span className="block whitespace-nowrap">Nosotros no</span>
+          <span className="block whitespace-nowrap">te ocultamos</span>
+          <span className="block whitespace-nowrap">nada.</span>
+        </HeroHeadline>
+        {heroHotspots.map((hotspot, i) => (
+          <HeroMessage
+            key={hotspot.title}
+            hotspot={hotspot}
+            ref={(el) => {
+              msgRefs.current[i] = el;
+            }}
           />
-        )}
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(180deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,0) 26%, rgba(0,0,0,0) 40%, rgba(0,0,0,.92) 92%)",
+        ))}
+      </PhotoLayerHidden>
+
+      {/* Sombra inferior compartida por ambas capas (vignette), sobre la capa oculta */}
+      <div className="bm-shade pointer-events-none absolute inset-0" />
+
+      <HeroBrand />
+
+      <HeroHeadline variant="visible">
+        <span className="block whitespace-nowrap">Toda agencia</span>
+        <span className="block whitespace-nowrap">se vende</span>
+        <span className="block whitespace-nowrap">
+          impecable<span className="text-bm-orange">.</span>
+        </span>
+      </HeroHeadline>
+
+      {heroHotspots.map((hotspot, i) => (
+        <HeroDot
+          key={hotspot.title}
+          hotspot={hotspot}
+          ref={(el) => {
+            dotRefs.current[i] = el;
           }}
         />
+      ))}
 
-        {!reducedMotion &&
-          heroHotspots.map((h) => (
-            <HeroHotspotMarker
-              key={h.id}
-              hotspot={h}
-              ref={(el) => {
-                hotspotRefs.current[h.id] = el;
-              }}
-            />
-          ))}
-      </div>
-
-      <div className="pointer-events-none absolute inset-x-0 z-[3] bottom-[clamp(44px,7vh,88px)]">
-        <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
-          <p className="text-[0.7rem] font-bold tracking-[0.2em] text-bm-g300 uppercase">
-            Agencia de publicidad · Cali, Colombia
-          </p>
-          <h1 className="relative mt-4 text-[clamp(2.2rem,6vw,4.6rem)] leading-[0.98] font-black tracking-[-0.03em] text-white uppercase">
-            {reducedMotion ? (
-              <span className="text-bm-orange">
-                Nosotros no
-                <br />
-                te ocultamos
-                <br />
-                nada.
-              </span>
-            ) : (
-              <>
-                <span className="hero-flip hero-flip-a">
-                  Toda agencia
-                  <br />
-                  se vende
-                  <br />
-                  impecable.
-                </span>
-                <span className="hero-flip hero-flip-b text-bm-orange">
-                  Nosotros no
-                  <br />
-                  te ocultamos
-                  <br />
-                  nada.
-                </span>
-                <span className="invisible" aria-hidden="true">
-                  Toda agencia
-                  <br />
-                  se vende
-                  <br />
-                  impecable.
-                </span>
-              </>
-            )}
-          </h1>
-        </div>
-      </div>
-
-      <div
-        className="pointer-events-none absolute right-[clamp(20px,4vw,56px)] bottom-[clamp(44px,7vh,88px)] z-[4] text-[0.62rem] font-bold tracking-[0.28em] text-bm-g300 uppercase"
-        style={{ writingMode: "vertical-rl" }}
-      >
-        Sigue bajando
-      </div>
+      <HeroSpotlight ref={spotRef} isDragging={isDragging} onPointerDown={handlePointerDown} />
     </section>
   );
 }
