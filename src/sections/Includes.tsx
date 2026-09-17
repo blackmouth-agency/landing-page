@@ -4,9 +4,7 @@ export default function Problem() {
       id="incluye"
       className="min-h-screen flex items-center justify-center"
     >
-      <h2 className="text-6xl font-bold">
-        Qué incluye
-      </h2>
+      <h2 className="text-6xl font-bold">Qué incluye</h2>
     </section>
   );
 }
