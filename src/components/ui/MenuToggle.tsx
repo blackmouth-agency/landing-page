@@ -10,7 +10,11 @@ const barClasses = [
   "-translate-y-[7px] -rotate-45",
 ];
 
-export default function MenuToggle({ open, onClick, controls }: MenuToggleProps) {
+export default function MenuToggle({
+  open,
+  onClick,
+  controls,
+}: MenuToggleProps) {
   return (
     <button
       type="button"
@@ -23,7 +27,7 @@ export default function MenuToggle({ open, onClick, controls }: MenuToggleProps)
       {barClasses.map((openClass, i) => (
         <span
           key={i}
-          className={`block h-[2px] w-full bg-white transition-all duration-200 ${open ? openClass : ""}`}
+          className={`block h-[2px] w-full bg-bm-black transition-all duration-200 ${open ? openClass : ""}`}
         />
       ))}
     </button>

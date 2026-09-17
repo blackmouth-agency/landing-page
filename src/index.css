@@ -72,14 +72,21 @@
   }
 }
 
-/* Velo claro que sostiene el titular negro sobre la foto final (capa visible) */
+/* Sombra suave sobre la foto final (capa visible): más densa a la izquierda, donde va el titular blanco */
 .bm-wash {
-  background: radial-gradient(
-    40% 36% at 12% 38%,
-    rgba(246, 244, 240, 0.46) 0%,
-    rgba(246, 244, 240, 0.26) 46%,
-    rgba(246, 244, 240, 0) 82%
-  );
+  background:
+    radial-gradient(
+      55% 60% at 18% 58%,
+      rgba(6, 6, 6, 0.5) 0%,
+      rgba(6, 6, 6, 0.28) 45%,
+      rgba(6, 6, 6, 0) 80%
+    ),
+    linear-gradient(
+      90deg,
+      rgba(6, 6, 6, 0.38) 0%,
+      rgba(6, 6, 6, 0.12) 45%,
+      rgba(6, 6, 6, 0) 70%
+    );
 }
 
 /* Sombra inferior compartida por ambas capas (vignette global) */
@@ -113,7 +120,7 @@
   right: 0;
   bottom: 0;
   height: 1px;
-  background: var(--color-bm-orange);
+  background: currentColor;
   transform: scaleX(0);
   transform-origin: right;
   transition: transform 0.24s cubic-bezier(0.165, 0.84, 0.44, 1);

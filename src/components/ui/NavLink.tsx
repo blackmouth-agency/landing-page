@@ -7,8 +7,8 @@ interface NavLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
 }
 
 const variantClasses: Record<NavLinkVariant, string> = {
-  desktop: "nav-link text-[0.68rem] tracking-[0.2em]",
-  mobile: "text-sm tracking-[0.15em]",
+  desktop: "nav-link text-[0.68rem] tracking-[0.2em] text-bm-black",
+  mobile: "text-sm tracking-[0.15em] text-white",
 };
 
 export default function NavLink({
@@ -19,7 +19,7 @@ export default function NavLink({
 }: NavLinkProps) {
   return (
     <a
-      className={`font-bold text-white uppercase ${variantClasses[variant]} ${className}`.trim()}
+      className={`font-bold uppercase ${variantClasses[variant]} ${className}`.trim()}
       {...anchorProps}
     >
       {children}
